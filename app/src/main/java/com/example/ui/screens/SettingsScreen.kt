@@ -16,8 +16,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.rounded.AddToHomeScreen
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -26,6 +32,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,16 +44,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.model.EmergencyUnlockMethod
 import com.example.model.FocusMode
 import com.example.model.ThemePreference
 import com.example.services.FocusTimerService
+import com.example.tile.StudyTileHelper
 import com.example.ui.components.ShieldStatusCard
 import com.example.ui.components.formatStudyDuration
 import com.example.ui.viewmodel.SettingsUiState
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
   uiState: SettingsUiState,
@@ -54,6 +67,12 @@ fun SettingsScreen(
   onDefaultModeSelected: (FocusMode) -> Unit,
   onDailyGoalSelected: (Int) -> Unit,
   onDefaultDurationSelected: (Int) -> Unit,
+  onEmergencyUnlockMethodSelected: (EmergencyUnlockMethod) -> Unit = {},
+  onOpenPinSetup: () -> Unit = {},
+  onDismissPinSetup: () -> Unit = {},
+  onSaveAccountabilityPin: (String, String, String) -> Unit = { _, _, _ -> },
+  onRemoveAccountabilityPin: (String) -> Unit = {},
+  onShortcutFeedback: (String) -> Unit = {},
   onOpenNotificationAccessSettings: () -> Unit,
   onOpenDndAccessSettings: () -> Unit,
   onOpenAppNotificationSettings: () -> Unit,
@@ -64,6 +83,7 @@ fun SettingsScreen(
   onDismissPrivacyMessage: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
+  val context = LocalContext.current
   val scrollState = rememberScrollState()
   val goalPresets = listOf(60, 90, 120, 180)
   val durationPresets = listOf(15, 25, 45, 60)
@@ -233,6 +253,124 @@ fun SettingsScreen(
                   .minimumInteractiveComponentSize()
                   .testTag("settings_goal_$minutes"),
             )
+          }
+        }
+      }
+
+      SettingsSectionCard(title = "Strict Lock Emergency Unlock") {
+        Column(
+          modifier = Modifier.fillMaxWidth().testTag("settings_emergency_unlock_card"),
+          verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+          FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            EmergencyUnlockMethod.entries.forEach { method ->
+              FilterChip(
+                selected = uiState.preferences.emergencyUnlockMethod == method,
+                enabled = !uiState.isSessionActive,
+                onClick = { onEmergencyUnlockMethodSelected(method) },
+                label = {
+                  Text(
+                    text = method.label,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
+                },
+                modifier =
+                  Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("settings_unlock_method_${method.name.lowercase()}"),
+              )
+            }
+          }
+
+          Text(
+            text = uiState.preferences.emergencyUnlockMethod.subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Surface(
+              shape = MaterialTheme.shapes.small,
+              color =
+                if (uiState.preferences.hasAccountabilityPin) {
+                  MaterialTheme.colorScheme.primaryContainer
+                } else {
+                  MaterialTheme.colorScheme.surfaceVariant
+                },
+            ) {
+              Text(
+                text =
+                  if (uiState.preferences.hasAccountabilityPin) "Partner PIN: Configured"
+                  else "Partner PIN: Not Set",
+                style = MaterialTheme.typography.labelSmall,
+                color =
+                  if (uiState.preferences.hasAccountabilityPin) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                  } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                  },
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+              )
+            }
+
+            FilledTonalButton(
+              onClick = onOpenPinSetup,
+              enabled = !uiState.isSessionActive,
+              modifier =
+                Modifier
+                  .minimumInteractiveComponentSize()
+                  .testTag("settings_manage_pin_button"),
+            ) {
+              Icon(
+                imageVector = Icons.Rounded.Key,
+                contentDescription = "Manage Accountability Partner PIN",
+                modifier = Modifier.size(16.dp),
+              )
+              Spacer(modifier = Modifier.size(6.dp))
+              Text(
+                if (uiState.preferences.hasAccountabilityPin) "Manage Partner PIN"
+                else "Set Partner PIN",
+              )
+            }
+          }
+        }
+      }
+
+      SettingsSectionCard(title = "Home Widget & Quick Settings Tile") {
+        Column(
+          modifier = Modifier.fillMaxWidth().testTag("settings_shortcuts_card"),
+          verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+          Text(
+            text =
+              "Add the Study Guard Home Screen Widget to monitor today's focus progress & remaining goal, or add the Study Mode Quick Settings tile to start a locked session from your status bar.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          Button(
+            onClick = { StudyTileHelper.requestAddTile(context, onShortcutFeedback) },
+            modifier =
+              Modifier
+                .fillMaxWidth()
+                .minimumInteractiveComponentSize()
+                .testTag("settings_add_qs_tile_button"),
+          ) {
+            Icon(
+              imageVector = Icons.Rounded.AddToHomeScreen,
+              contentDescription = "Add Study Mode Quick Settings tile",
+              modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.size(8.dp))
+            Text("Add Study Mode Quick Tile")
           }
         }
       }
@@ -412,6 +550,16 @@ fun SettingsScreen(
     )
   }
 
+  if (uiState.isPinDialogOpen) {
+    AccountabilityPinDialog(
+      hasExistingPin = uiState.preferences.hasAccountabilityPin,
+      errorMessage = uiState.pinDialogError,
+      onSave = onSaveAccountabilityPin,
+      onRemove = onRemoveAccountabilityPin,
+      onDismiss = onDismissPinSetup,
+    )
+  }
+
   if (showClearHistoryDialog) {
     AlertDialog(
       onDismissRequest = { showClearHistoryDialog = false },
@@ -441,6 +589,107 @@ fun SettingsScreen(
       },
     )
   }
+}
+
+@Composable
+private fun AccountabilityPinDialog(
+  hasExistingPin: Boolean,
+  errorMessage: String?,
+  onSave: (String, String, String) -> Unit,
+  onRemove: (String) -> Unit,
+  onDismiss: () -> Unit,
+) {
+  var currentPin by remember { mutableStateOf("") }
+  var newPin by remember { mutableStateOf("") }
+  var confirmPin by remember { mutableStateOf("") }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    modifier = Modifier.testTag("accountability_pin_dialog"),
+    title = {
+      Text(if (hasExistingPin) "Manage Partner PIN" else "Set Accountability Partner PIN")
+    },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+          text =
+            "Have a parent, roommate, or friend choose a 4-digit PIN so early emergency unlocks require their confirmation.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        if (hasExistingPin) {
+          OutlinedTextField(
+            value = currentPin,
+            onValueChange = { currentPin = it.filter { ch -> ch.isDigit() }.take(4) },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            label = { Text("Current 4-Digit PIN") },
+            modifier = Modifier.fillMaxWidth().testTag("pin_current_input"),
+          )
+        }
+
+        OutlinedTextField(
+          value = newPin,
+          onValueChange = { newPin = it.filter { ch -> ch.isDigit() }.take(4) },
+          singleLine = true,
+          visualTransformation = PasswordVisualTransformation(),
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+          label = { Text(if (hasExistingPin) "New 4-Digit PIN" else "4-Digit PIN") },
+          modifier = Modifier.fillMaxWidth().testTag("pin_new_input"),
+        )
+
+        OutlinedTextField(
+          value = confirmPin,
+          onValueChange = { confirmPin = it.filter { ch -> ch.isDigit() }.take(4) },
+          singleLine = true,
+          visualTransformation = PasswordVisualTransformation(),
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+          label = { Text("Confirm 4-Digit PIN") },
+          modifier = Modifier.fillMaxWidth().testTag("pin_confirm_input"),
+        )
+
+        if (errorMessage != null) {
+          Text(
+            text = errorMessage,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.testTag("pin_dialog_error"),
+          )
+        }
+
+        if (hasExistingPin) {
+          TextButton(
+            onClick = { onRemove(currentPin) },
+            colors =
+              ButtonDefaults.textButtonColors(
+                contentColor = MaterialTheme.colorScheme.error,
+              ),
+            modifier = Modifier.testTag("pin_remove_button"),
+          ) {
+            Text("Remove Partner PIN")
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = { onSave(currentPin, newPin, confirmPin) },
+        modifier = Modifier.testTag("pin_save_button"),
+      ) {
+        Text("Save PIN")
+      }
+    },
+    dismissButton = {
+      TextButton(
+        onClick = onDismiss,
+        modifier = Modifier.testTag("pin_cancel_button"),
+      ) {
+        Text("Cancel")
+      }
+    },
+  )
 }
 
 @Composable

@@ -26,7 +26,8 @@ class MainActivityRobolectricTest {
   fun `launches home screen switches modes and navigates across all tabs`() {
     composeTestRule.waitForIdle()
 
-    // Home screen displays core cards and CTA button
+    // Home screen displays core cards, Study Level pill, and CTA button
+    composeTestRule.onNodeWithTag("home_study_level_pill").assertIsDisplayed()
     composeTestRule.onNodeWithTag("daily_progress_card").assertIsDisplayed()
     composeTestRule.onNodeWithTag("start_focus_button").performScrollTo().assertIsDisplayed()
 
@@ -54,12 +55,20 @@ class MainActivityRobolectricTest {
       .performScrollToNode(hasTestTag("toggle_mode_strict_lock"))
     composeTestRule.onNodeWithTag("toggle_mode_strict_lock").assertIsDisplayed()
 
-    // Navigate to Analytics tab
+    // Navigate to Analytics tab and verify Study Level & Milestone Badges
     composeTestRule.onNodeWithTag("nav_analytics").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("analytics_period_week").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("analytics_list")
+      .performScrollToNode(hasTestTag("study_level_card"))
+    composeTestRule.onNodeWithTag("study_level_card").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("analytics_list")
+      .performScrollToNode(hasTestTag("milestone_badges_card"))
+    composeTestRule.onNodeWithTag("milestone_badges_card").assertIsDisplayed()
 
     // Open Weekly Study Trends screen from Analytics and verify charts
+    composeTestRule.onNodeWithTag("analytics_list")
+      .performScrollToNode(hasTestTag("open_weekly_trends_button"))
     composeTestRule.onNodeWithTag("open_weekly_trends_button").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("trends_range_last_4_weeks").assertIsDisplayed()
@@ -75,10 +84,12 @@ class MainActivityRobolectricTest {
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("analytics_period_week").assertIsDisplayed()
 
-    // Navigate to Settings tab
+    // Navigate to Settings tab and verify Emergency Unlock & Quick Tile cards
     composeTestRule.onNodeWithTag("nav_settings").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("settings_theme_dark").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("settings_emergency_unlock_card").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("settings_add_qs_tile_button").performScrollTo().assertIsDisplayed()
     composeTestRule.onNodeWithTag("settings_reset_rules_button").performScrollTo().assertIsDisplayed()
   }
 }

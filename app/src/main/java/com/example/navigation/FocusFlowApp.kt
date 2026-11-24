@@ -20,6 +20,7 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -37,7 +38,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.MainLaunchRequest
 import com.example.di.AppContainer
+import com.example.model.FocusMode
+import com.example.services.FocusTimerService
 import com.example.ui.screens.AnalyticsScreen
 import com.example.ui.screens.FocusTimerScreen
 import com.example.ui.screens.HomeScreen
@@ -50,6 +54,8 @@ import com.example.ui.viewmodel.HomeViewModel
 import com.example.ui.viewmodel.NotificationRulesViewModel
 import com.example.ui.viewmodel.SettingsViewModel
 import com.example.ui.viewmodel.WeeklyTrendsViewModel
+import com.example.widget.StudyWidgetUpdater
+import kotlinx.coroutines.flow.first
 
 @Composable
 fun FocusFlowApp(
@@ -57,6 +63,8 @@ fun FocusFlowApp(
   appContainer: AppContainer,
   isDarkTheme: Boolean,
   homeViewModel: HomeViewModel,
+  launchRequest: MainLaunchRequest = MainLaunchRequest.NONE,
+  onLaunchRequestConsumed: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val navController = rememberNavController()
@@ -103,6 +111,7 @@ fun FocusFlowApp(
           sessionRepository = appContainer.sessionRepository,
           notificationRuleRepository = appContainer.notificationRuleRepository,
           timerRepository = appContainer.focusTimerRepository,
+          onWidgetDataChanged = { StudyWidgetUpdater.requestUpdateAsync(appContext) },
         )
     )
 
@@ -122,6 +131,34 @@ fun FocusFlowApp(
   val analyticsUiState by analyticsViewModel.uiState.collectAsStateWithLifecycle()
   val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
   val weeklyTrendsUiState by weeklyTrendsViewModel.uiState.collectAsStateWithLifecycle()
+
+  LaunchedEffect(launchRequest) {
+    when (launchRequest) {
+      MainLaunchRequest.NONE -> Unit
+      MainLaunchRequest.OPEN_TIMER -> {
+        navigateToTopLevel(navController, FocusFlowDestination.FocusTimer)
+        onLaunchRequestConsumed()
+      }
+      MainLaunchRequest.START_STUDY_MODE -> {
+        navigateToTopLevel(navController, FocusFlowDestination.FocusTimer)
+        if (!appContainer.focusTimerRepository.timerState.value.isActive) {
+          val prefs = appContainer.preferencesRepository.preferencesFlow.first()
+          val duration =
+            if (prefs.activeFocusMode == FocusMode.STUDY_MODE) prefs.selectedDurationMinutes
+            else FocusMode.STUDY_MODE.defaultDurationMinutes
+          appContainer.preferencesRepository.setActiveFocusMode(FocusMode.STUDY_MODE)
+          appContainer.preferencesRepository.setSelectedDurationMinutes(duration)
+          FocusTimerService.startSession(
+            context = appContext,
+            mode = FocusMode.STUDY_MODE,
+            durationMinutes = duration,
+            strictLock = prefs.studyModeConfig.strictSessionLock,
+          )
+        }
+        onLaunchRequestConsumed()
+      }
+    }
+  }
 
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
     homeViewModel.refreshSystemPermissions()
@@ -251,6 +288,8 @@ fun FocusFlowApp(
               onOpenEmergencyUnlock = focusTimerViewModel::openEmergencyUnlockDialog,
               onDismissEmergencyUnlock = focusTimerViewModel::dismissEmergencyUnlockDialog,
               onEmergencyPhraseChanged = focusTimerViewModel::updateEmergencyUnlockPhrase,
+              onEmergencyMathChanged = focusTimerViewModel::updateEmergencyMathInput,
+              onEmergencyPinChanged = focusTimerViewModel::updateEmergencyPinInput,
               onConfirmEmergencyUnlock = focusTimerViewModel::confirmEmergencyUnlock,
             )
           }
@@ -316,6 +355,12 @@ fun FocusFlowApp(
               onDefaultModeSelected = settingsViewModel::setDefaultFocusMode,
               onDailyGoalSelected = settingsViewModel::setDailyGoalMinutes,
               onDefaultDurationSelected = settingsViewModel::setDefaultDurationMinutes,
+              onEmergencyUnlockMethodSelected = settingsViewModel::setEmergencyUnlockMethod,
+              onOpenPinSetup = settingsViewModel::openPinSetupDialog,
+              onDismissPinSetup = settingsViewModel::dismissPinSetupDialog,
+              onSaveAccountabilityPin = settingsViewModel::saveAccountabilityPin,
+              onRemoveAccountabilityPin = settingsViewModel::removeAccountabilityPin,
+              onShortcutFeedback = settingsViewModel::showShortcutFeedback,
               onOpenNotificationAccessSettings = {
                 appContainer.permissionReader.openNotificationListenerSettings(appContext)
               },

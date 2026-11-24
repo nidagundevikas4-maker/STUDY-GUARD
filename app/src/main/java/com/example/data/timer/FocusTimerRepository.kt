@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 
 class FocusTimerRepository(
   private val sessionRepository: SessionRepository,
+  private val onSessionPersisted: () -> Unit = {},
 ) {
   private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -142,6 +143,7 @@ class FocusTimerRepository(
         outcome = SessionOutcome.COMPLETED,
         dismissedNotificationsCount = snapshot.dismissedDuringSession,
       )
+      onSessionPersisted()
     }
 
     activeStartedAtEpochMs = 0L
@@ -179,6 +181,7 @@ class FocusTimerRepository(
           outcome = SessionOutcome.INTERRUPTED,
           dismissedNotificationsCount = snapshot.dismissedDuringSession,
         )
+        onSessionPersisted()
       }
     }
     activeStartedAtEpochMs = 0L

@@ -11,6 +11,7 @@ import com.example.data.timer.FocusTimerRepository
 import com.example.database.FocusFlowDatabase
 import com.example.notification.DndPolicyManager
 import com.example.permissions.SystemPermissionReader
+import com.example.widget.StudyWidgetUpdater
 
 class AppContainer(context: Context) {
   private val appContext = context.applicationContext
@@ -61,6 +62,9 @@ class AppContainer(context: Context) {
   }
 
   val focusTimerRepository: FocusTimerRepository by lazy {
-    FocusTimerRepository(sessionRepository)
+    FocusTimerRepository(
+      sessionRepository = sessionRepository,
+      onSessionPersisted = { StudyWidgetUpdater.requestUpdateAsync(appContext) },
+    )
   }
 }

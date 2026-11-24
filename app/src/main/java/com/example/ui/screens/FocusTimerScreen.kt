@@ -65,12 +65,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import com.example.model.EmergencyUnlockMethod
 import com.example.model.TimerPhase
 import com.example.services.FocusTimerService
 import com.example.ui.components.SessionDurationPicker
 import com.example.ui.theme.FocusFlowTypography
 import com.example.ui.theme.MetricNumericStyle
 import com.example.ui.viewmodel.FocusTimerUiState
+import com.example.ui.viewmodel.MathChallenge
 import kotlin.math.roundToInt
 
 @Composable
@@ -88,6 +93,8 @@ fun FocusTimerScreen(
   onOpenEmergencyUnlock: () -> Unit = {},
   onDismissEmergencyUnlock: () -> Unit = {},
   onEmergencyPhraseChanged: (String) -> Unit = {},
+  onEmergencyMathChanged: (String) -> Unit = {},
+  onEmergencyPinChanged: (String) -> Unit = {},
   onConfirmEmergencyUnlock: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
@@ -319,9 +326,18 @@ fun FocusTimerScreen(
                     tint = MaterialTheme.colorScheme.onTertiaryContainer,
                     modifier = Modifier.size(18.dp),
                   )
+                  val unlockSummary =
+                    when (uiState.effectiveUnlockMethod) {
+                      EmergencyUnlockMethod.ACCOUNTABILITY_PIN ->
+                        "Early unlock requires your 4-digit Partner PIN."
+                      EmergencyUnlockMethod.MATH_CHALLENGE ->
+                        "Early unlock requires solving a math challenge + typing UNLOCK."
+                      EmergencyUnlockMethod.COOLDOWN_PHRASE ->
+                        "Early unlock requires a 10s cooldown + typing UNLOCK."
+                    }
                   Text(
                     text =
-                      "Strict Lock enabled for ${uiState.selectedMode.title}: once started, you cannot pause, shorten time, or open blocked apps until ${uiState.configuredDurationMinutes}m completes.",
+                      "Strict Lock enabled for ${uiState.selectedMode.title}: pausing, shortening time, and blocked apps stay locked for ${uiState.configuredDurationMinutes}m. $unlockSummary",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                   )
@@ -612,10 +628,17 @@ fun FocusTimerScreen(
   if (uiState.isEmergencyUnlockDialogOpen) {
     EmergencyUnlockDialog(
       remainingSeconds = timerState.remainingSeconds,
+      unlockMethod = uiState.effectiveUnlockMethod,
       countdownSeconds = uiState.unlockCountdownSeconds,
       phraseInput = uiState.unlockPhraseInput,
+      mathChallenge = uiState.mathChallenge,
+      mathInput = uiState.unlockMathInput,
+      pinInput = uiState.unlockPinInput,
+      isPinIncorrect = uiState.isPinIncorrectAfterFourDigits,
       canConfirm = uiState.canConfirmEmergencyUnlock,
       onPhraseChanged = onEmergencyPhraseChanged,
+      onMathChanged = onEmergencyMathChanged,
+      onPinChanged = onEmergencyPinChanged,
       onConfirm = onConfirmEmergencyUnlock,
       onDismiss = onDismissEmergencyUnlock,
     )
@@ -625,17 +648,32 @@ fun FocusTimerScreen(
 @Composable
 private fun EmergencyUnlockDialog(
   remainingSeconds: Int,
+  unlockMethod: EmergencyUnlockMethod,
   countdownSeconds: Int,
   phraseInput: String,
+  mathChallenge: MathChallenge,
+  mathInput: String,
+  pinInput: String,
+  isPinIncorrect: Boolean,
   canConfirm: Boolean,
   onPhraseChanged: (String) -> Unit,
+  onMathChanged: (String) -> Unit,
+  onPinChanged: (String) -> Unit,
   onConfirm: () -> Unit,
   onDismiss: () -> Unit,
 ) {
   AlertDialog(
     onDismissRequest = onDismiss,
     modifier = Modifier.testTag("emergency_unlock_dialog"),
-    title = { Text("Emergency Unlock") },
+    title = {
+      Text(
+        when (unlockMethod) {
+          EmergencyUnlockMethod.ACCOUNTABILITY_PIN -> "Partner PIN Unlock"
+          EmergencyUnlockMethod.MATH_CHALLENGE -> "Challenge Unlock"
+          EmergencyUnlockMethod.COOLDOWN_PHRASE -> "Emergency Unlock"
+        }
+      )
+    },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -645,29 +683,109 @@ private fun EmergencyUnlockDialog(
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        Surface(
-          shape = MaterialTheme.shapes.small,
-          color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
-          modifier = Modifier.fillMaxWidth().testTag("emergency_unlock_countdown"),
-        ) {
-          Text(
-            text =
-              if (countdownSeconds > 0) "Cooldown check: please wait ${countdownSeconds}s..."
-              else "Cooldown complete. Type UNLOCK below to end session.",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onTertiaryContainer,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-          )
-        }
+        when (unlockMethod) {
+          EmergencyUnlockMethod.COOLDOWN_PHRASE -> {
+            Surface(
+              shape = MaterialTheme.shapes.small,
+              color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
+              modifier = Modifier.fillMaxWidth().testTag("emergency_unlock_countdown"),
+            ) {
+              Text(
+                text =
+                  if (countdownSeconds > 0) "Cooldown check: please wait ${countdownSeconds}s..."
+                  else "Cooldown complete. Type UNLOCK below to end session.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+              )
+            }
 
-        OutlinedTextField(
-          value = phraseInput,
-          onValueChange = onPhraseChanged,
-          singleLine = true,
-          label = { Text("Type UNLOCK to confirm") },
-          placeholder = { Text("UNLOCK") },
-          modifier = Modifier.fillMaxWidth().testTag("emergency_unlock_phrase_input"),
-        )
+            OutlinedTextField(
+              value = phraseInput,
+              onValueChange = onPhraseChanged,
+              singleLine = true,
+              label = { Text("Type UNLOCK to confirm") },
+              placeholder = { Text("UNLOCK") },
+              modifier = Modifier.fillMaxWidth().testTag("emergency_unlock_phrase_input"),
+            )
+          }
+
+          EmergencyUnlockMethod.MATH_CHALLENGE -> {
+            Surface(
+              shape = MaterialTheme.shapes.small,
+              color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.75f),
+              modifier = Modifier.fillMaxWidth().testTag("emergency_unlock_math_prompt"),
+            ) {
+              Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+              ) {
+                Text(
+                  text = "Solve to verify focus check:",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Text(
+                  text = "${mathChallenge.prompt} = ?",
+                  style = MetricNumericStyle,
+                  color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+              }
+            }
+
+            OutlinedTextField(
+              value = mathInput,
+              onValueChange = onMathChanged,
+              singleLine = true,
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+              label = { Text("Answer") },
+              placeholder = { Text("Enter result") },
+              modifier = Modifier.fillMaxWidth().testTag("emergency_unlock_math_input"),
+            )
+
+            OutlinedTextField(
+              value = phraseInput,
+              onValueChange = onPhraseChanged,
+              singleLine = true,
+              label = { Text("Type UNLOCK to confirm") },
+              placeholder = { Text("UNLOCK") },
+              modifier = Modifier.fillMaxWidth().testTag("emergency_unlock_phrase_input"),
+            )
+          }
+
+          EmergencyUnlockMethod.ACCOUNTABILITY_PIN -> {
+            Surface(
+              shape = MaterialTheme.shapes.small,
+              color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
+              modifier = Modifier.fillMaxWidth().testTag("emergency_unlock_pin_banner"),
+            ) {
+              Text(
+                text = "Ask your accountability partner (parent, roommate, or friend) to enter the 4-digit unlock PIN.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+              )
+            }
+
+            OutlinedTextField(
+              value = pinInput,
+              onValueChange = onPinChanged,
+              singleLine = true,
+              isError = isPinIncorrect,
+              visualTransformation = PasswordVisualTransformation(),
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+              label = { Text("4-Digit Partner PIN") },
+              placeholder = { Text("••••") },
+              supportingText =
+                if (isPinIncorrect) {
+                  { Text("Incorrect 4-digit PIN. Try again or keep studying.") }
+                } else {
+                  null
+                },
+              modifier = Modifier.fillMaxWidth().testTag("emergency_unlock_pin_input"),
+            )
+          }
+        }
       }
     },
     confirmButton = {

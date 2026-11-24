@@ -49,6 +49,8 @@ import com.example.model.FocusSessionSummary
 import com.example.model.SessionOutcome
 import com.example.ui.components.FocusModeBreakdownCard
 import com.example.ui.components.FocusTrendChartCard
+import com.example.ui.components.MilestoneBadgesCard
+import com.example.ui.components.StudyLevelCard
 import com.example.ui.components.formatStudyDuration
 import com.example.ui.theme.MetricNumericStyle
 import com.example.ui.viewmodel.AnalyticsPeriod
@@ -74,7 +76,7 @@ fun AnalyticsScreen(
     contentAlignment = Alignment.TopCenter,
   ) {
     LazyColumn(
-      modifier = Modifier.widthIn(max = 600.dp).fillMaxSize(),
+      modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().testTag("analytics_list"),
       contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -187,6 +189,18 @@ fun AnalyticsScreen(
             )
           }
         }
+      }
+
+      item {
+        StudyLevelCard(
+          level = uiState.milestoneSummary.level,
+          unlockedBadgesCount = uiState.milestoneSummary.unlockedCount,
+          totalBadgesCount = uiState.milestoneSummary.badges.size,
+        )
+      }
+
+      item {
+        MilestoneBadgesCard(badges = uiState.milestoneSummary.badges)
       }
 
       item {

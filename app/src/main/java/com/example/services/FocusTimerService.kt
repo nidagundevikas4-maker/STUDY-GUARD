@@ -24,6 +24,8 @@ import com.example.R
 import com.example.blocker.BlockEvaluationResult
 import com.example.model.FocusMode
 import com.example.model.PersistedActiveSession
+import com.example.tile.StudyTileHelper
+import com.example.widget.StudyWidgetUpdater
 import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
@@ -100,6 +102,8 @@ class FocusTimerService : Service() {
         )
         startTickLoop()
         startAppBlockerLoop()
+        StudyWidgetUpdater.requestUpdateAsync(applicationContext)
+        StudyTileHelper.requestTileUpdate(applicationContext)
       }
 
       ACTION_PAUSE -> {
@@ -116,6 +120,8 @@ class FocusTimerService : Service() {
           remainingSeconds = pausedRemainingSeconds,
           isPaused = true,
         )
+        StudyWidgetUpdater.requestUpdateAsync(applicationContext)
+        StudyTileHelper.requestTileUpdate(applicationContext)
       }
 
       ACTION_RESUME -> {
@@ -131,6 +137,8 @@ class FocusTimerService : Service() {
         )
         startTickLoop()
         startAppBlockerLoop()
+        StudyWidgetUpdater.requestUpdateAsync(applicationContext)
+        StudyTileHelper.requestTileUpdate(applicationContext)
       }
 
       ACTION_RESET -> {
@@ -153,6 +161,8 @@ class FocusTimerService : Service() {
           forceUnlock = forceUnlock,
         )
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        StudyWidgetUpdater.requestUpdateAsync(applicationContext)
+        StudyTileHelper.requestTileUpdate(applicationContext)
         stopSelf()
       }
 
@@ -215,6 +225,8 @@ class FocusTimerService : Service() {
       updateOngoingNotification(remainingSeconds = remainingSeconds, isPaused = false)
       startTickLoop()
       startAppBlockerLoop()
+      StudyWidgetUpdater.requestUpdateAsync(applicationContext)
+      StudyTileHelper.requestTileUpdate(applicationContext)
     }
   }
 
@@ -333,6 +345,8 @@ class FocusTimerService : Service() {
     timerRepository.onTimerCompleted()
     ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     postCompletionNotification()
+    StudyWidgetUpdater.requestUpdateAsync(applicationContext)
+    StudyTileHelper.requestTileUpdate(applicationContext)
     stopSelf()
   }
 

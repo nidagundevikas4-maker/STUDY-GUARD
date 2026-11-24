@@ -38,4 +38,7 @@
     <string name="nav_weekly_trends">Weekly Trends</string>
     <string name="home_quick_access_trends">Weekly Trends</string>
     <string name="home_quick_access_trends_sub">Study hours &amp; productivity curve</string>
+    <string name="qs_tile_study_mode">Study Mode</string>
+    <string name="widget_study_progress_description">Shows today\'s study progress, remaining daily goal, and quick-launches Study Mode.</string>
+    <string name="widget_title">Study Guard</string>
 </resources>

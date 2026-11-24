@@ -3,12 +3,14 @@ package com.example.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.data.analytics.MilestoneCalculator
 import com.example.data.rules.NotificationRuleRepository
 import com.example.data.session.SessionRepository
 import com.example.model.DistractionEventRecord
 import com.example.model.FocusMode
 import com.example.model.FocusSessionSummary
 import com.example.model.SessionOutcome
+import com.example.model.StudyMilestoneSummary
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -58,6 +60,7 @@ data class AnalyticsUiState(
   val modeBreakdown: List<ModeBreakdownItem> = emptyList(),
   val topDistractingApps: List<TopDistractingApp> = emptyList(),
   val sessions: List<FocusSessionSummary> = emptyList(),
+  val milestoneSummary: StudyMilestoneSummary = MilestoneCalculator.calculate(emptyList(), emptyList()),
 )
 
 class AnalyticsViewModel(
@@ -160,6 +163,7 @@ class AnalyticsViewModel(
       modeBreakdown = modeBreakdown,
       topDistractingApps = topApps,
       sessions = filteredSessions,
+      milestoneSummary = MilestoneCalculator.calculate(allSessions, allDistractions),
     )
   }
 

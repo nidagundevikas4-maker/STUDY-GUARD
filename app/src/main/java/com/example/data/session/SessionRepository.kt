@@ -19,17 +19,24 @@ class SessionRepository(
     sessionDao.observeAllSessions().map { list -> list.map { it.toSummary() } }
 
   fun observeTodaySessions(): Flow<List<FocusSessionSummary>> {
-    val startOfDayMs =
-      Calendar.getInstance()
-        .apply {
-          set(Calendar.HOUR_OF_DAY, 0)
-          set(Calendar.MINUTE, 0)
-          set(Calendar.SECOND, 0)
-          set(Calendar.MILLISECOND, 0)
-        }
-        .timeInMillis
+    val startOfDayMs = startOfTodayEpochMs()
     return sessionDao.observeSessionsSince(startOfDayMs).map { list -> list.map { it.toSummary() } }
   }
+
+  suspend fun getTodayStudyMinutesSnapshot(): Int {
+    val sessions = sessionDao.getSessionsSince(startOfTodayEpochMs())
+    return sessions.sumOf { it.actualDurationSeconds / 60 }
+  }
+
+  private fun startOfTodayEpochMs(): Long =
+    Calendar.getInstance()
+      .apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+      }
+      .timeInMillis
 
   suspend fun recordSession(
     mode: FocusMode,

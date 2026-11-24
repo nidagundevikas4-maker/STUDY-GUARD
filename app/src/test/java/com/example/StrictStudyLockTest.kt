@@ -10,6 +10,7 @@ import com.example.data.rules.NotificationRuleRepository
 import com.example.data.session.SessionRepository
 import com.example.data.timer.FocusTimerRepository
 import com.example.database.FocusFlowDatabase
+import com.example.model.EmergencyUnlockMethod
 import com.example.model.FocusMode
 import com.example.model.FocusTimerState
 import com.example.model.TimerPhase
@@ -67,6 +68,10 @@ class StrictStudyLockTest {
         distractionEventDao = database.distractionEventDao(),
       )
     preferencesRepository = FocusPreferencesRepository(context)
+    runBlocking {
+      preferencesRepository.clearAccountabilityPin()
+      preferencesRepository.setEmergencyUnlockMethod(EmergencyUnlockMethod.COOLDOWN_PHRASE)
+    }
     timerRepository = FocusTimerRepository(sessionRepository)
   }
 
@@ -216,6 +221,8 @@ class StrictStudyLockTest {
       withTimeout(5000) {
         timerViewModel.uiState.first { it.isEmergencyUnlockDialogOpen }
       }
+    assertEquals(EmergencyUnlockMethod.COOLDOWN_PHRASE, openedState.effectiveUnlockMethod)
+    assertEquals(0, openedState.unlockCountdownSeconds)
     assertFalse(openedState.canConfirmEmergencyUnlock)
 
     timerViewModel.updateEmergencyUnlockPhrase("quit")
@@ -224,8 +231,109 @@ class StrictStudyLockTest {
     timerViewModel.updateEmergencyUnlockPhrase("unlock")
     val readyState =
       withTimeout(5000) {
+        timerViewModel.uiState.first {
+          it.unlockPhraseInput == "unlock"
+        }
+      }
+    assertTrue("Expected unlockable state but got: $readyState", readyState.canConfirmEmergencyUnlock)
+  }
+
+  @Test
+  fun `math challenge unlock requires exact math answer and UNLOCK phrase`() = runBlocking {
+    preferencesRepository.setEmergencyUnlockMethod(com.example.model.EmergencyUnlockMethod.MATH_CHALLENGE)
+    val fixedChallenge = com.example.ui.viewmodel.MathChallenge(prompt = "(14 × 6) + 19", answer = 103)
+    val timerViewModel =
+      FocusTimerViewModel(
+        appContext = context,
+        preferencesRepository = preferencesRepository,
+        timerRepository = timerRepository,
+        unlockCooldownSeconds = 0,
+        mathChallengeGenerator = { fixedChallenge },
+      )
+
+    withTimeout(5000) {
+      timerViewModel.uiState.first {
+        it.effectiveUnlockMethod == com.example.model.EmergencyUnlockMethod.MATH_CHALLENGE
+      }
+    }
+
+    timerViewModel.openEmergencyUnlockDialog()
+    timerViewModel.updateEmergencyUnlockPhrase("UNLOCK")
+    timerViewModel.updateEmergencyMathInput("99")
+    assertFalse(timerViewModel.uiState.value.canConfirmEmergencyUnlock)
+
+    timerViewModel.updateEmergencyMathInput("103")
+    val readyState =
+      withTimeout(5000) {
         timerViewModel.uiState.first { it.canConfirmEmergencyUnlock }
       }
     assertTrue(readyState.canConfirmEmergencyUnlock)
+  }
+
+  @Test
+  fun `accountability partner PIN validates hashed PIN and resists changes while session is active`() = runBlocking {
+    val settingsViewModel =
+      com.example.ui.viewmodel.SettingsViewModel(
+        preferencesRepository = preferencesRepository,
+        permissionReader = SystemPermissionReader(context),
+        sessionRepository = sessionRepository,
+        notificationRuleRepository = ruleRepository,
+        timerRepository = timerRepository,
+      )
+    val timerViewModel =
+      FocusTimerViewModel(
+        appContext = context,
+        preferencesRepository = preferencesRepository,
+        timerRepository = timerRepository,
+      )
+
+    // Configure 4-digit Partner PIN via SettingsViewModel
+    settingsViewModel.saveAccountabilityPin(
+      currentPin = "",
+      newPin = "4829",
+      confirmPin = "4829",
+    )
+
+    val configuredSettings =
+      withTimeout(5000) {
+        settingsViewModel.uiState.first {
+          it.preferences.hasAccountabilityPin &&
+            it.preferences.emergencyUnlockMethod == com.example.model.EmergencyUnlockMethod.ACCOUNTABILITY_PIN
+        }
+      }
+    assertTrue(configuredSettings.preferences.hasAccountabilityPin)
+
+    // Start locked Study Mode session
+    timerRepository.onTimerStarted(
+      mode = FocusMode.STUDY_MODE,
+      durationMinutes = 25,
+      isStrictLocked = true,
+    )
+
+    // Attempting to switch back to cooldown or remove PIN while session is active is rejected
+    settingsViewModel.setEmergencyUnlockMethod(com.example.model.EmergencyUnlockMethod.COOLDOWN_PHRASE)
+    settingsViewModel.removeAccountabilityPin("4829")
+    assertTrue(settingsViewModel.uiState.value.preferences.hasAccountabilityPin)
+
+    // FocusTimerViewModel enforces Partner PIN
+    withTimeout(5000) {
+      timerViewModel.uiState.first {
+        it.effectiveUnlockMethod == com.example.model.EmergencyUnlockMethod.ACCOUNTABILITY_PIN
+      }
+    }
+    timerViewModel.openEmergencyUnlockDialog()
+    timerViewModel.updateEmergencyPinInput("1111")
+    val wrongPinState =
+      withTimeout(5000) {
+        timerViewModel.uiState.first { it.isPinIncorrectAfterFourDigits }
+      }
+    assertFalse(wrongPinState.canConfirmEmergencyUnlock)
+
+    timerViewModel.updateEmergencyPinInput("4829")
+    val validPinState =
+      withTimeout(5000) {
+        timerViewModel.uiState.first { it.canConfirmEmergencyUnlock }
+      }
+    assertTrue(validPinState.canConfirmEmergencyUnlock)
   }
 }

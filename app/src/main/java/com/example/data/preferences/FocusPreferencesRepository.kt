@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.model.EmergencyUnlockMethod
 import com.example.model.FocusMode
 import com.example.model.FocusModeConfig
 import com.example.model.PersistedActiveSession
@@ -32,6 +33,8 @@ class FocusPreferencesRepository(context: Context) {
     val DAILY_GOAL_MINUTES = intPreferencesKey("daily_goal_minutes")
     val SELECTED_DURATION_MINUTES = intPreferencesKey("selected_duration_minutes")
     val THEME_PREFERENCE = stringPreferencesKey("theme_preference")
+    val EMERGENCY_UNLOCK_METHOD = stringPreferencesKey("emergency_unlock_method")
+    val ACCOUNTABILITY_PIN_HASH = stringPreferencesKey("accountability_pin_hash")
 
     val DEEP_AUTO_DND = booleanPreferencesKey("deep_auto_dnd")
     val DEEP_STRICT_ALARMS_DND = booleanPreferencesKey("deep_strict_alarms_dnd")
@@ -81,12 +84,19 @@ class FocusPreferencesRepository(context: Context) {
         val dailyGoal = (prefs[Keys.DAILY_GOAL_MINUTES] ?: 120).coerceIn(30, 360)
         val duration =
           (prefs[Keys.SELECTED_DURATION_MINUTES] ?: mode.defaultDurationMinutes).coerceIn(5, 180)
+        val unlockMethod =
+          prefs[Keys.EMERGENCY_UNLOCK_METHOD]?.let { raw ->
+            EmergencyUnlockMethod.entries.firstOrNull { it.name == raw }
+          } ?: EmergencyUnlockMethod.COOLDOWN_PHRASE
+        val pinHash = prefs[Keys.ACCOUNTABILITY_PIN_HASH].orEmpty()
 
         UserPreferences(
           activeFocusMode = mode,
           dailyGoalMinutes = dailyGoal,
           selectedDurationMinutes = duration,
           themePreference = theme,
+          emergencyUnlockMethod = unlockMethod,
+          accountabilityPinHash = pinHash,
           deepFocusConfig =
             FocusModeConfig(
               autoEnableDnd = prefs[Keys.DEEP_AUTO_DND] ?: true,
@@ -190,6 +200,27 @@ class FocusPreferencesRepository(context: Context) {
   suspend fun setThemePreference(theme: ThemePreference) {
     dataStore.edit { prefs ->
       prefs[Keys.THEME_PREFERENCE] = theme.name
+    }
+  }
+
+  suspend fun setEmergencyUnlockMethod(method: EmergencyUnlockMethod) {
+    dataStore.edit { prefs ->
+      prefs[Keys.EMERGENCY_UNLOCK_METHOD] = method.name
+    }
+  }
+
+  suspend fun setAccountabilityPinHash(pinHash: String) {
+    dataStore.edit { prefs ->
+      prefs[Keys.ACCOUNTABILITY_PIN_HASH] = pinHash
+    }
+  }
+
+  suspend fun clearAccountabilityPin() {
+    dataStore.edit { prefs ->
+      prefs.remove(Keys.ACCOUNTABILITY_PIN_HASH)
+      if (prefs[Keys.EMERGENCY_UNLOCK_METHOD] == EmergencyUnlockMethod.ACCOUNTABILITY_PIN.name) {
+        prefs[Keys.EMERGENCY_UNLOCK_METHOD] = EmergencyUnlockMethod.COOLDOWN_PHRASE.name
+      }
     }
   }
 

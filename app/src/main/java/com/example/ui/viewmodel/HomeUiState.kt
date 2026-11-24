@@ -1,8 +1,10 @@
 package com.example.ui.viewmodel
 
+import com.example.data.analytics.MilestoneCalculator
 import com.example.model.FocusMode
 import com.example.model.FocusSessionSummary
 import com.example.model.FocusTimerState
+import com.example.model.StudyLevelInfo
 import com.example.model.ThemePreference
 import com.example.permissions.SystemPermissionSnapshot
 
@@ -18,6 +20,7 @@ data class HomeUiState(
   val themePreference: ThemePreference = ThemePreference.SYSTEM,
   val permissionSnapshot: SystemPermissionSnapshot = SystemPermissionSnapshot(),
   val isGoalSheetOpen: Boolean = false,
+  val studyLevel: StudyLevelInfo = MilestoneCalculator.resolveLevel(0),
 ) {
   val dailyProgressFraction: Float
     get() =

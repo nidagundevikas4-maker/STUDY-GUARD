@@ -24,11 +24,31 @@ data class PersistedActiveSession(
   val bootTimeEstimateMs: Long,
 )
 
+enum class EmergencyUnlockMethod(
+  val label: String,
+  val subtitle: String,
+) {
+  COOLDOWN_PHRASE(
+    label = "10s Cooldown",
+    subtitle = "Wait 10 seconds and type UNLOCK",
+  ),
+  MATH_CHALLENGE(
+    label = "Math Challenge",
+    subtitle = "Solve a mental math puzzle and type UNLOCK",
+  ),
+  ACCOUNTABILITY_PIN(
+    label = "Partner PIN",
+    subtitle = "Require a 4-digit PIN held by a parent, roommate, or friend",
+  ),
+}
+
 data class UserPreferences(
   val activeFocusMode: FocusMode = FocusMode.STUDY_MODE,
   val dailyGoalMinutes: Int = 120,
   val selectedDurationMinutes: Int = 25,
   val themePreference: ThemePreference = ThemePreference.SYSTEM,
+  val emergencyUnlockMethod: EmergencyUnlockMethod = EmergencyUnlockMethod.COOLDOWN_PHRASE,
+  val accountabilityPinHash: String = "",
   val deepFocusConfig: FocusModeConfig =
     FocusModeConfig(
       autoEnableDnd = true,
@@ -54,6 +74,9 @@ data class UserPreferences(
       strictSessionLock = false,
     ),
 ) {
+  val hasAccountabilityPin: Boolean
+    get() = accountabilityPinHash.isNotBlank()
+
   fun configFor(mode: FocusMode): FocusModeConfig =
     when (mode) {
       FocusMode.DEEP_FOCUS -> deepFocusConfig

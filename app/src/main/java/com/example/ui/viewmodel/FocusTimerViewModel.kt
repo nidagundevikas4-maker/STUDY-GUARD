@@ -6,9 +6,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.preferences.FocusPreferencesRepository
 import com.example.data.timer.FocusTimerRepository
+import com.example.model.EmergencyUnlockMethod
 import com.example.model.FocusMode
 import com.example.model.FocusTimerState
+import com.example.security.PinHashUtil
 import com.example.services.FocusTimerService
+import kotlin.random.Random
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,21 +22,74 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+data class MathChallenge(
+  val prompt: String,
+  val answer: Int,
+) {
+  companion object {
+    fun generateRandom(): MathChallenge {
+      val a = Random.nextInt(12, 24)
+      val b = Random.nextInt(4, 10)
+      val c = Random.nextInt(11, 35)
+      return MathChallenge(
+        prompt = "($a × $b) + $c",
+        answer = (a * b) + c,
+      )
+    }
+  }
+}
+
+private data class EmergencyUnlockDraft(
+  val isOpen: Boolean = false,
+  val countdownSeconds: Int = 10,
+  val phraseInput: String = "",
+  val mathChallenge: MathChallenge = MathChallenge(prompt = "(14 × 6) + 19", answer = 103),
+  val mathInput: String = "",
+  val pinInput: String = "",
+)
+
 data class FocusTimerUiState(
   val timerState: FocusTimerState = FocusTimerState(),
   val selectedMode: FocusMode = FocusMode.STUDY_MODE,
   val configuredDurationMinutes: Int = 25,
   val isStrictLockConfiguredForMode: Boolean = true,
+  val configuredUnlockMethod: EmergencyUnlockMethod = EmergencyUnlockMethod.COOLDOWN_PHRASE,
+  val hasAccountabilityPin: Boolean = false,
   val isCustomDurationDialogOpen: Boolean = false,
   val showNotificationDeniedBanner: Boolean = false,
   val isEmergencyUnlockDialogOpen: Boolean = false,
   val unlockCountdownSeconds: Int = 10,
   val unlockPhraseInput: String = "",
+  val mathChallenge: MathChallenge = MathChallenge(prompt = "(14 × 6) + 19", answer = 103),
+  val unlockMathInput: String = "",
+  val unlockPinInput: String = "",
+  val isPinMatched: Boolean = false,
 ) {
+  val effectiveUnlockMethod: EmergencyUnlockMethod
+    get() =
+      if (configuredUnlockMethod == EmergencyUnlockMethod.ACCOUNTABILITY_PIN && !hasAccountabilityPin) {
+        EmergencyUnlockMethod.COOLDOWN_PHRASE
+      } else {
+        configuredUnlockMethod
+      }
+
+  val isPinIncorrectAfterFourDigits: Boolean
+    get() =
+      effectiveUnlockMethod == EmergencyUnlockMethod.ACCOUNTABILITY_PIN &&
+        unlockPinInput.length == 4 &&
+        !isPinMatched
+
   val canConfirmEmergencyUnlock: Boolean
     get() =
-      unlockCountdownSeconds <= 0 &&
-        unlockPhraseInput.trim().equals(EMERGENCY_UNLOCK_PHRASE, ignoreCase = true)
+      when (effectiveUnlockMethod) {
+        EmergencyUnlockMethod.COOLDOWN_PHRASE ->
+          unlockCountdownSeconds <= 0 &&
+            unlockPhraseInput.trim().equals(EMERGENCY_UNLOCK_PHRASE, ignoreCase = true)
+        EmergencyUnlockMethod.MATH_CHALLENGE ->
+          unlockMathInput.trim().toIntOrNull() == mathChallenge.answer &&
+            unlockPhraseInput.trim().equals(EMERGENCY_UNLOCK_PHRASE, ignoreCase = true)
+        EmergencyUnlockMethod.ACCOUNTABILITY_PIN -> isPinMatched
+      }
 
   companion object {
     const val EMERGENCY_UNLOCK_PHRASE = "UNLOCK"
@@ -45,41 +101,47 @@ class FocusTimerViewModel(
   private val preferencesRepository: FocusPreferencesRepository,
   private val timerRepository: FocusTimerRepository,
   private val unlockCooldownSeconds: Int = 10,
+  private val mathChallengeGenerator: () -> MathChallenge = { MathChallenge.generateRandom() },
 ) : ViewModel() {
 
   private val isCustomDialogOpen = MutableStateFlow(false)
   private val notificationDeniedBanner = MutableStateFlow(false)
-  private val emergencyDialogOpen = MutableStateFlow(false)
-  private val emergencyCountdown = MutableStateFlow(unlockCooldownSeconds)
-  private val emergencyPhrase = MutableStateFlow("")
+  private val unlockDraft =
+    MutableStateFlow(EmergencyUnlockDraft(countdownSeconds = unlockCooldownSeconds))
 
   private var emergencyCountdownJob: Job? = null
 
   val uiState: StateFlow<FocusTimerUiState> =
     combine(
-      combine(
-        timerRepository.timerState,
-        preferencesRepository.preferencesFlow,
-        isCustomDialogOpen,
-        notificationDeniedBanner,
-      ) { timer, prefs, dialogOpen, deniedBanner ->
-        FocusTimerUiState(
-          timerState = timer,
-          selectedMode = prefs.activeFocusMode,
-          configuredDurationMinutes = prefs.selectedDurationMinutes,
-          isStrictLockConfiguredForMode = prefs.configFor(prefs.activeFocusMode).strictSessionLock,
-          isCustomDurationDialogOpen = dialogOpen,
-          showNotificationDeniedBanner = deniedBanner,
-        )
-      },
-      emergencyDialogOpen,
-      emergencyCountdown,
-      emergencyPhrase,
-    ) { base, unlockOpen, countdown, phrase ->
-      base.copy(
-        isEmergencyUnlockDialogOpen = unlockOpen,
-        unlockCountdownSeconds = countdown,
-        unlockPhraseInput = phrase,
+      timerRepository.timerState,
+      preferencesRepository.preferencesFlow,
+      isCustomDialogOpen,
+      notificationDeniedBanner,
+      unlockDraft,
+    ) { timer, prefs, dialogOpen, deniedBanner, draft ->
+      val pinMatched =
+        if (prefs.hasAccountabilityPin) {
+          PinHashUtil.verifyPin(draft.pinInput, prefs.accountabilityPinHash)
+        } else {
+          false
+        }
+
+      FocusTimerUiState(
+        timerState = timer,
+        selectedMode = prefs.activeFocusMode,
+        configuredDurationMinutes = prefs.selectedDurationMinutes,
+        isStrictLockConfiguredForMode = prefs.configFor(prefs.activeFocusMode).strictSessionLock,
+        configuredUnlockMethod = prefs.emergencyUnlockMethod,
+        hasAccountabilityPin = prefs.hasAccountabilityPin,
+        isCustomDurationDialogOpen = dialogOpen,
+        showNotificationDeniedBanner = deniedBanner,
+        isEmergencyUnlockDialogOpen = draft.isOpen,
+        unlockCountdownSeconds = draft.countdownSeconds,
+        unlockPhraseInput = draft.phraseInput,
+        mathChallenge = draft.mathChallenge,
+        unlockMathInput = draft.mathInput,
+        unlockPinInput = draft.pinInput,
+        isPinMatched = pinMatched,
       )
     }.stateIn(
       scope = viewModelScope,
@@ -146,30 +208,53 @@ class FocusTimerViewModel(
 
   fun openEmergencyUnlockDialog() {
     emergencyCountdownJob?.cancel()
-    emergencyPhrase.value = ""
-    emergencyCountdown.value = unlockCooldownSeconds.coerceAtLeast(0)
-    emergencyDialogOpen.value = true
+    val startSeconds = unlockCooldownSeconds.coerceAtLeast(0)
+    unlockDraft.value =
+      EmergencyUnlockDraft(
+        isOpen = true,
+        countdownSeconds = startSeconds,
+        phraseInput = "",
+        mathChallenge = mathChallengeGenerator(),
+        mathInput = "",
+        pinInput = "",
+      )
 
-    if (unlockCooldownSeconds > 0) {
+    if (uiState.value.effectiveUnlockMethod == EmergencyUnlockMethod.COOLDOWN_PHRASE && startSeconds > 0) {
       emergencyCountdownJob =
         viewModelScope.launch {
-          for (sec in (unlockCooldownSeconds - 1) downTo 0) {
+          for (sec in (startSeconds - 1) downTo 0) {
             delay(1_000L)
-            emergencyCountdown.value = sec
+            unlockDraft.update { it.copy(countdownSeconds = sec) }
           }
         }
     }
   }
 
   fun updateEmergencyUnlockPhrase(input: String) {
-    emergencyPhrase.value = input
+    unlockDraft.update { it.copy(phraseInput = input) }
+  }
+
+  fun updateEmergencyMathInput(input: String) {
+    val sanitized = input.filter { it.isDigit() }.take(6)
+    unlockDraft.update { it.copy(mathInput = sanitized) }
+  }
+
+  fun updateEmergencyPinInput(input: String) {
+    val sanitized = input.filter { it.isDigit() }.take(4)
+    unlockDraft.update { it.copy(pinInput = sanitized) }
   }
 
   fun dismissEmergencyUnlockDialog() {
     emergencyCountdownJob?.cancel()
     emergencyCountdownJob = null
-    emergencyDialogOpen.value = false
-    emergencyPhrase.value = ""
+    unlockDraft.update {
+      it.copy(
+        isOpen = false,
+        phraseInput = "",
+        mathInput = "",
+        pinInput = "",
+      )
+    }
   }
 
   fun confirmEmergencyUnlock() {

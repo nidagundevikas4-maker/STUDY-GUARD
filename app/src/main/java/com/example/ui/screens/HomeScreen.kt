@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Spa
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.WorkspacePremium
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -96,8 +97,10 @@ fun HomeScreen(
       ) {
         HomeHeader(
           greetingHour = uiState.greetingHour,
+          studyLevel = uiState.studyLevel,
           isDarkTheme = isDarkTheme,
           onToggleTheme = onToggleTheme,
+          onLevelClick = onNavigateToAnalytics,
         )
 
         if (isWideLayout) {
@@ -213,8 +216,10 @@ fun HomeScreen(
 @Composable
 private fun HomeHeader(
   greetingHour: Int,
+  studyLevel: com.example.model.StudyLevelInfo,
   isDarkTheme: Boolean,
   onToggleTheme: () -> Unit,
+  onLevelClick: () -> Unit,
 ) {
   val greeting =
     when {
@@ -229,26 +234,56 @@ private fun HomeHeader(
     verticalAlignment = Alignment.Top,
   ) {
     Column(modifier = Modifier.weight(1f)) {
-      Surface(
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f),
+      Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
       ) {
-        Row(
-          modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
+        Surface(
+          shape = MaterialTheme.shapes.small,
+          color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f),
         ) {
-          Icon(
-            imageVector = Icons.Rounded.Spa,
-            contentDescription = stringResource(R.string.app_name),
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(15.dp),
-          )
-          Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-          )
+          Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            Icon(
+              imageVector = Icons.Rounded.Spa,
+              contentDescription = stringResource(R.string.app_name),
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(15.dp),
+            )
+            Text(
+              text = stringResource(R.string.app_name),
+              style = MaterialTheme.typography.labelMedium,
+              color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+          }
+        }
+
+        Surface(
+          onClick = onLevelClick,
+          shape = MaterialTheme.shapes.small,
+          color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
+          modifier = Modifier.testTag("home_study_level_pill"),
+        ) {
+          Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+          ) {
+            Icon(
+              imageVector = Icons.Rounded.WorkspacePremium,
+              contentDescription = "Study Level ${studyLevel.levelNumber}",
+              tint = MaterialTheme.colorScheme.onSecondaryContainer,
+              modifier = Modifier.size(14.dp),
+            )
+            Text(
+              text = "Lv. ${studyLevel.levelNumber} · ${studyLevel.title}",
+              style = MaterialTheme.typography.labelMedium,
+              color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+          }
         }
       }
       Spacer(modifier = Modifier.height(10.dp))

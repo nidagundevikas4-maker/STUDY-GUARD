@@ -15,6 +15,9 @@ interface FocusSessionDao {
   @Query("SELECT * FROM focus_sessions WHERE endedAtEpochMs >= :startOfDayEpochMs ORDER BY endedAtEpochMs DESC")
   fun observeSessionsSince(startOfDayEpochMs: Long): Flow<List<FocusSessionEntity>>
 
+  @Query("SELECT * FROM focus_sessions WHERE endedAtEpochMs >= :startOfDayEpochMs ORDER BY endedAtEpochMs DESC")
+  suspend fun getSessionsSince(startOfDayEpochMs: Long): List<FocusSessionEntity>
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertSession(session: FocusSessionEntity): Long
 
